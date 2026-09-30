@@ -129,6 +129,7 @@ export class OllamaProvider implements ModeloProvider {
                         },
                     ],
                     stream: false,
+                    ...(input.format ? { format: input.format } : {}),
                 },
                 {
                     timeout,

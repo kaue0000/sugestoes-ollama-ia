@@ -25,18 +25,44 @@ export interface SugestaoRespostaResultado {
   status: 'RASCUNHO';
 }
 
+const MENCIONA_CREDENCIAL =
+  /\b(?:senha|password|token|código\s+de\s+autenticação|codigo\s+de\s+autenticacao|código\s+de\s+verificação|codigo\s+de\s+verificacao|secret)\b/i;
+const AVISO_CREDENCIAL =
+  /\b(?:não|nao|nunca|jamais)\s+(?:compartilhe|compartilhar|informe|informar|envie|enviar|forneça|forneca|fornecer|passe|passar|solicite|solicitar|peça|peca|pedir)\b.{0,50}\b(?:senha|password|token|código\s+de\s+autenticação|codigo\s+de\s+autenticacao|código\s+de\s+verificação|codigo\s+de\s+verificacao|secret)\b/i;
+
 const CONTEUDO_PROIBIDO = [
-  /\b(?:senha|password|token|código\s+de\s+autenticação|codigo\s+de\s+autenticacao|código\s+de\s+verificação|codigo\s+de\s+verificacao|secret)\b/i,
-  /\b(?:prometemos|garantimos|garantia|será\s+resolvido|sera\s+resolvido|resolução\s+garantida|resolucao\s+garantida|prazo\s+de|até\s+\d+\s+(?:dia|dias|hora|horas)|ate\s+\d+\s+(?:dia|dias|hora|horas))\b/i,
-  /\b(?:reembolso|acesso|aprovação|aprovado|aprovada|autorizado|autorizada)\b.{0,35}\b(?:aprovado|aprovada|confirmado|confirmada|concedido|concedida|autorizado|autorizada|liberado|liberada)\b/i,
-  /\b(?:aprovado|aprovada|confirmado|confirmada|concedido|concedida|autorizado|autorizada|liberado|liberada)\b.{0,35}\b(?:reembolso|acesso|aprovação)\b/i,
+  /\b(?:senha|password|token|secret)\s*[:=]\s*(?!\[DADO SENSÍVEL OMITIDO\])[^\s,;.]+/i,
+  /\b(?:prometemos|garantimos)\b.{0,35}\b(?:resolver|resolvido|prazo|solução|solucao)\b/i,
+  /\b(?:será|sera|vai ser)\s+(?:resolvido|solucionado|concluído|concluido|finalizado)\s+(?:em|até|ate|dentro de)\s+\d+\s+(?:dia|dias|hora|horas)\b/i,
+  /\b(?:resolução|resolucao)\s+garantida\b/i,
   /https?:\/\//i,
 ];
 
+function mencionaCredencialInsegura(texto: string): boolean {
+  return texto.split(/(?<=[.!?;])\s+/).some(
+    (frase) =>
+      MENCIONA_CREDENCIAL.test(frase) && !AVISO_CREDENCIAL.test(frase),
+  );
+}
+
 const DECISAO_NAO_AUTORIZADA = [
-  /\b(?:aprov(?:e|ar|ado|ada)|autorizar|conceder|liberar)\b.{0,40}\b(?:reembolso|acesso|benefício|beneficio)\b/i,
-  /\b(?:reembolso|acesso)\b.{0,40}\b(?:aprov(?:e|ar)|autorizar|conceder|liberar)\b/i,
+  /\b(?:seu\s+)?(?:reembolso|acesso|benefício|beneficio)\s+(?:foi|está|esta|será|sera)\s+(?:aprovado|aprovada|autorizado|autorizada|concedido|concedida|liberado|liberada)\b/i,
+  /\b(?:aprovamos|autorizamos|concedemos|liberamos|vamos\s+aprovar|iremos\s+aprovar|vamos\s+autorizar|iremos\s+autorizar|vamos\s+liberar|iremos\s+liberar)\b.{0,40}\b(?:reembolso|acesso|benefício|beneficio)\b/i,
 ];
+
+const PEDIDO_DADOS_ADICIONAIS =
+  /\b(?:mais\s+(?:informa(?:ção|ções)|dados|detalhes)|(?:precisa|precisamos|necessita|necessitamos)\s+(?:saber\s+mais|fornecer|enviar|informar)|(?:pode|poderia)\s+(?:fornecer|enviar|informar)|(?:envie|informe|forneça|compartilhe)\b.{0,40}\b(?:dados?|informa(?:ção|ções)|detalhes?|mensagem)|(?:qual|quais|quando|desde\s+quando)\s+(?:sistema|página|pagina|serviço|servico|mensagem|erro|problema|isso|o\s+problema))\b/i;
+
+function removerPedidoDeDadosAdicionais(rascunho: string): string {
+  const frases = rascunho.split(/(?<=[.!?])\s+/);
+  const frasesSemPedidos = frases.filter(
+    (frase) => !PEDIDO_DADOS_ADICIONAIS.test(frase),
+  );
+
+  return frasesSemPedidos.length
+    ? frasesSemPedidos.join(' ').trim()
+    : 'Reconhecemos o problema relatado. A resolução ainda não foi confirmada.';
+}
 
 function parseSugestaoResposta(
   resposta: string,
@@ -82,10 +108,15 @@ function parseSugestaoResposta(
     );
   }
 
-  const textos = [rascunho, ...informacoesAdicionais];
+  const rascunhoSemPedidos = informacoesAdicionais.length
+    ? rascunho.trim()
+    : removerPedidoDeDadosAdicionais(rascunho.trim());
+  const textos = [rascunhoSemPedidos, ...informacoesAdicionais];
   if (
+    informacoesAdicionais.some((item) => MENCIONA_CREDENCIAL.test(item)) ||
     textos.some(
       (texto) =>
+        mencionaCredencialInsegura(texto) ||
         CONTEUDO_PROIBIDO.some((regra) => regra.test(texto)) ||
         DECISAO_NAO_AUTORIZADA.some((regra) => regra.test(texto)),
     )
@@ -96,7 +127,7 @@ function parseSugestaoResposta(
   }
 
   return {
-    rascunho: rascunho.trim(),
+    rascunho: rascunhoSemPedidos,
     informacoesAdicionais: informacoesAdicionais.map((item) => item.trim()),
     revisaoHumanaObrigatoria: true,
   };
@@ -134,6 +165,7 @@ export class ChamadosService {
     const texto = textoOriginal.trim();
     const resultado = await this.modelo.gerar({
       mensagem: buildSugestaoRespostaPrompt(texto),
+      format: 'json',
     });
     const sugestao = parseSugestaoResposta(resultado.resposta);
 

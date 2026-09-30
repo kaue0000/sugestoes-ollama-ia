@@ -65,6 +65,24 @@
                   <div class="message-author">Sugestões <span>· IA local</span></div>
                 }
                 <p>{{ item.text || (status() === 'loading' ? 'Pensando...' : '') }}</p>
+                @if (item.revisaoHumanaObrigatoria) {
+                  <div class="response-meta">
+                    <span>{{ item.status }}</span>
+                    <span>Revisão humana obrigatória</span>
+                  </div>
+                  @if (item.informacoesAdicionais?.length) {
+                    <div class="additional-info">
+                      <p>Informações adicionais necessárias</p>
+                      <ul>
+                        @for (informacao of item.informacoesAdicionais; track informacao) {
+                          <li>{{ informacao }}</li>
+                        }
+                      </ul>
+                    </div>
+                  } @else {
+                    <p class="additional-info-empty">Nenhuma informação adicional necessária.</p>
+                  }
+                }
               </div>
             </article>
           }

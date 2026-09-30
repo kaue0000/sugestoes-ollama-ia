@@ -36,6 +36,7 @@ describe('Feature 3 - sugestão de resposta', () => {
       revisaoHumanaObrigatoria: true,
       informacoesAdicionais: [],
     });
+    expect(gerar).toHaveBeenCalledWith(expect.objectContaining({ format: 'json' }));
   });
 
   it('não solicita dados já informados ao relatar erro na emissão do histórico', async () => {
@@ -52,6 +53,55 @@ describe('Feature 3 - sugestão de resposta', () => {
       rascunho: expect.stringContaining('Reconhecemos o problema'),
       informacoesAdicionais: [],
       revisaoHumanaObrigatoria: true,
+    });
+  });
+
+  it('remove pedidos de dados do rascunho quando a lista adicional está vazia', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta(
+        'Olá, João. Reconhecemos o problema relatado. Precisamos saber mais sobre o mesmo.',
+      ),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(
+      service.sugerirResposta('O erro ocorreu ao emitir meu histórico escolar.'),
+    ).resolves.toMatchObject({
+      rascunho: 'Olá, João. Reconhecemos o problema relatado.',
+      informacoesAdicionais: [],
+      revisaoHumanaObrigatoria: true,
+    });
+  });
+
+  it('remove perguntas diretas quando a lista adicional está vazia', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta(
+        'Olá. Reconhecemos o problema no cadastro. Qual sistema apresenta o problema?',
+      ),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(
+      service.sugerirResposta('Meu cadastro apresenta um problema.'),
+    ).resolves.toMatchObject({
+      rascunho: 'Olá. Reconhecemos o problema no cadastro.',
+      informacoesAdicionais: [],
+    });
+  });
+
+  it('preserva pedidos de dados quando a lista adicional está preenchida', async () => {
+    const rascunho =
+      'Olá. Para entendermos melhor, poderia informar qual sistema apresenta o problema?';
+    gerar.mockResolvedValue({
+      resposta: resposta(rascunho, ['Qual sistema apresenta o problema?']),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(
+      service.sugerirResposta('Meu cadastro apresenta um problema.'),
+    ).resolves.toMatchObject({
+      rascunho,
+      informacoesAdicionais: ['Qual sistema apresenta o problema?'],
     });
   });
 
@@ -102,6 +152,48 @@ describe('Feature 3 - sugestão de resposta', () => {
     await expect(service.sugerirResposta('Não consigo acessar minha conta.')).rejects.toThrow('conteúdo proibido');
   });
 
+  it('rejeita valor de credencial exposto no rascunho', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta('Sua senha: ExemploFicticio-123 deve ser mantida em sigilo.'),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(service.sugerirResposta('Não consigo acessar minha conta.')).rejects.toThrow('conteúdo proibido');
+  });
+
+  it('rejeita rascunho que comenta ou valida uma credencial', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta('Sua senha está correta, mas tivemos problemas em processá-la. Poderia confirmar se já tentou redefini-la?'),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(service.sugerirResposta('Não consigo acessar minha conta.')).rejects.toThrow('conteúdo proibido');
+  });
+
+  it('permite alertar o solicitante para não compartilhar credenciais', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta('Olá. Nunca compartilhe sua senha conosco; não precisamos dela.'),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(service.sugerirResposta('Não consigo acessar minha conta.')).resolves.toMatchObject({
+      informacoesAdicionais: [],
+      revisaoHumanaObrigatoria: true,
+    });
+  });
+
+  it('permite informar que um prazo não pode ser confirmado', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta('Olá. Não é possível confirmar o prazo de resolução neste momento.'),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(service.sugerirResposta('Quando meu chamado será resolvido?')).resolves.toMatchObject({
+      informacoesAdicionais: [],
+      revisaoHumanaObrigatoria: true,
+    });
+  });
+
   it('rejeita aprovação de reembolso ou acesso', async () => {
     gerar.mockResolvedValue({
       resposta: resposta('Seu reembolso foi aprovado e o acesso foi liberado.'),
@@ -109,6 +201,18 @@ describe('Feature 3 - sugestão de resposta', () => {
     });
 
     await expect(service.sugerirResposta('Aprove meu reembolso e libere meu acesso.')).rejects.toThrow('conteúdo proibido');
+  });
+
+  it('permite recusar confirmação de aprovação sem decidir pelo atendente', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta('Olá. Não podemos confirmar a aprovação do seu reembolso por esta mensagem; a decisão exige revisão humana.'),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(service.sugerirResposta('Aprove meu reembolso.')).resolves.toMatchObject({
+      informacoesAdicionais: [],
+      revisaoHumanaObrigatoria: true,
+    });
   });
 
   it('rejeita saída sem revisão humana obrigatória', async () => {
