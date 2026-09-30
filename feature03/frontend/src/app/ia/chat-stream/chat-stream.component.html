@@ -1,0 +1,104 @@
+<div class="workspace">
+  <aside class="sidebar" aria-label="Navegação">
+    <a class="brand" href="/" aria-label="Sugestões, início">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span>Sugestões</span>
+    </a>
+
+    <button class="new-chat" type="button" (click)="novaConversa()">
+      <span aria-hidden="true">+</span>
+      <span>Nova conversa</span>
+    </button>
+
+    <div class="sidebar-caption">SEU ESPAÇO</div>
+    <div class="model-item">
+      <span class="model-indicator" aria-hidden="true"></span>
+      <span>Assistente local</span>
+    </div>
+
+    <div class="sidebar-footer">
+      <span class="connection-dot" aria-hidden="true"></span>
+      <span>Modelo conectado</span>
+    </div>
+  </aside>
+
+  <main class="chat-main">
+    <header class="topbar">
+      <div class="mobile-brand"><span class="brand-mark" aria-hidden="true">S</span> Sugestões</div>
+      <span class="conversation-label">{{ mensagens().length ? 'Conversa' : 'Novo espaço' }}</span>
+      <span class="model-badge"><span class="connection-dot" aria-hidden="true"></span> IA local</span>
+    </header>
+
+    <section
+      class="conversation"
+      [class.is-empty]="mensagens().length === 0"
+      aria-label="Conversa com o assistente"
+    >
+      @if (mensagens().length === 0) {
+        <div class="welcome">
+          <div class="welcome-mark" aria-hidden="true">✳</div>
+          <p class="eyebrow">SEU ASSISTENTE, SEM DISTÂNCIA</p>
+          <h1>O que vamos<br /><span>pensar juntos?</span></h1>
+          <p class="welcome-copy">Uma ideia, uma dúvida ou um desafio. Comece por onde quiser.</p>
+
+          <div class="suggestions" aria-label="Sugestões de mensagem">
+            <button type="button" (click)="usarSugestao('Me ajude a organizar uma ideia')">
+              <span aria-hidden="true">↗</span> Organizar uma ideia
+            </button>
+            <button type="button" (click)="usarSugestao('Explique um assunto de forma simples')">
+              <span aria-hidden="true">⌁</span> Aprender algo novo
+            </button>
+            <button type="button" (click)="usarSugestao('Me ajude a escrever um texto')">
+              <span aria-hidden="true">✎</span> Escrever melhor
+            </button>
+          </div>
+        </div>
+      } @else {
+        <div class="message-list" #messageList aria-live="polite" aria-relevant="additions text">
+          @for (item of mensagens(); track $index) {
+            <article class="message" [class.user-message]="item.role === 'user'">
+              @if (item.role === 'assistant') {
+                <span class="assistant-avatar" aria-hidden="true">✳</span>
+              }
+              <div class="message-body">
+                @if (item.role === 'assistant') {
+                  <div class="message-author">Sugestões <span>· IA local</span></div>
+                }
+                <p>{{ item.text || (status() === 'loading' ? 'Pensando...' : '') }}</p>
+              </div>
+            </article>
+          }
+        </div>
+      }
+
+      <div class="composer-wrap">
+        <form class="composer" (ngSubmit)="enviar()">
+          <label class="sr-only" for="mensagem">Escreva sua mensagem</label>
+          <textarea
+            id="mensagem"
+            name="mensagem"
+            [(ngModel)]="mensagem"
+            maxlength="2000"
+            rows="1"
+            placeholder="Escreva sua mensagem..."
+            [disabled]="status() === 'loading'"
+            (keydown.enter)="enviarComEnter($event)"
+          ></textarea>
+          <div class="composer-actions">
+            <span class="composer-hint">{{ status() === 'loading' ? 'Gerando resposta...' : 'Enter para enviar · Shift + Enter para nova linha' }}</span>
+            @if (status() === 'loading') {
+              <button class="send-button stop-button" type="button" (click)="cancelar()" aria-label="Interromper resposta">
+                <span aria-hidden="true">■</span>
+              </button>
+            } @else {
+              <button class="send-button" type="submit" [disabled]="!mensagem.trim()" aria-label="Enviar mensagem">
+                <span aria-hidden="true">↑</span>
+              </button>
+            }
+          </div>
+        </form>
+        <p class="disclaimer">A IA pode cometer erros. Confira informações importantes.</p>
+      </div>
+    </section>
+  </main>
+</div>
