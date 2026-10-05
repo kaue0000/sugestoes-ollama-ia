@@ -5,6 +5,9 @@ import { IaStreamService } from '../ia-stream.service';
 interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
+  informacoesAdicionais?: string[];
+  revisaoHumanaObrigatoria?: boolean;
+  status?: 'RASCUNHO';
 }
 
 @Component({
@@ -38,25 +41,29 @@ export class ChatStreamComponent {
     this.scrollToLatest();
 
     try {
-      for await (const event of this.ia.responder(
+      const sugestao = await this.ia.sugerirResposta(
         mensagem,
         this.abortController.signal,
-      )) {
-        if (event.type === 'delta' && event.content) {
-          this.appendToLatest(event.content);
-        }
-        if (event.type === 'error') throw new Error(event.message);
-      }
-
+      );
+      this.updateLatest({
+        text: sugestao.rascunho,
+        informacoesAdicionais: sugestao.informacoesAdicionais,
+        revisaoHumanaObrigatoria: sugestao.revisaoHumanaObrigatoria,
+        status: sugestao.status,
+      });
       this.status.set('done');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         this.status.set('cancelled');
+        this.updateLatest({ text: 'Geração interrompida.' });
       } else {
         this.status.set('error');
-        this.appendToLatest(
-          'Não foi possível obter uma resposta. Verifique se a API local está disponível.',
-        );
+        this.updateLatest({
+          text:
+            error instanceof Error
+              ? error.message
+              : 'Não foi possível gerar a sugestão. Verifique se a API local está disponível.',
+        });
       }
     } finally {
       this.abortController = undefined;
@@ -85,11 +92,11 @@ export class ChatStreamComponent {
     void this.enviar();
   }
 
-  private appendToLatest(text: string): void {
+  private updateLatest(update: Partial<ChatMessage>): void {
     this.mensagens.update((current) => {
       const latest = current.at(-1);
       if (!latest || latest.role !== 'assistant') return current;
-      return [...current.slice(0, -1), { ...latest, text: latest.text + text }];
+      return [...current.slice(0, -1), { ...latest, ...update }];
     });
     this.scrollToLatest();
   }

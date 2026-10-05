@@ -1,57 +1,61 @@
 import { Injectable } from '@angular/core';
 
-export interface StreamEvent {
-  type: 'delta' | 'done' | 'error';
-  content?: string;
-  message?: string;
+export interface SugestaoResposta {
+  rascunho: string;
+  informacoesAdicionais: string[];
+  revisaoHumanaObrigatoria: true;
+  status: 'RASCUNHO';
 }
 
 @Injectable({ providedIn: 'root' })
 export class IaStreamService {
-  async *responder(
-    mensagem: string,
+  async sugerirResposta(
+    texto: string,
     signal: AbortSignal,
-  ): AsyncIterable<StreamEvent> {
-    const response = await fetch(
-      'http://localhost:3000/ia/responder-stream',
-      {
+  ): Promise<SugestaoResposta> {
+    let response: Response;
+    try {
+      response = await fetch('http://localhost:3000/chamados/sugerir-resposta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagem }),
+        body: JSON.stringify({ texto }),
         signal,
-      },
-    );
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      throw new Error('Não foi possível conectar à API local. Verifique se o backend está disponível.');
+    }
 
     if (!response.ok) {
-      throw new Error(`Falha ao iniciar: HTTP ${response.status}`);
-    }
+      const body: unknown = await response.json().catch(() => null);
+      const mensagemApi =
+        typeof body === 'object' && body !== null && 'message' in body
+          ? body.message
+          : undefined;
+      const mensagem = Array.isArray(mensagemApi)
+        ? mensagemApi.join(' ')
+        : typeof mensagemApi === 'string'
+          ? mensagemApi
+          : '';
 
-    if (!response.body) {
-      throw new Error('O navegador não disponibilizou o corpo incremental');
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (line.trim()) yield JSON.parse(line) as StreamEvent;
-        }
+      if (response.status === 502 && mensagem.includes('conteúdo proibido')) {
+        throw new Error(
+          'A sugestão gerada não passou pela validação de segurança. Tente novamente ou encaminhe o chamado para revisão manual.',
+        );
+      }
+      if (response.status === 502 && mensagem.includes('sugestão de resposta inválida')) {
+        throw new Error('O modelo retornou uma sugestão em formato inválido. Tente novamente.');
+      }
+      if (response.status === 504) {
+        throw new Error('O modelo demorou demais para responder. Tente novamente.');
+      }
+      if (response.status === 503) {
+        throw new Error('O serviço de IA local está indisponível. Verifique se o modelo está conectado.');
       }
 
-      buffer += decoder.decode();
-      if (buffer.trim()) yield JSON.parse(buffer) as StreamEvent;
-    } finally {
-      reader.releaseLock();
+      throw new Error(`Não foi possível gerar a sugestão (HTTP ${response.status}).`);
     }
+
+    return (await response.json()) as SugestaoResposta;
   }
 }

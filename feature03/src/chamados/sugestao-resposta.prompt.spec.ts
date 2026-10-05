@@ -11,14 +11,18 @@ describe('prompt de sugestão de resposta', () => {
     expect(prompt).toContain('revisão humana antes do envio');
   });
 
-  it('não pede dados adicionais quando o relato já permite encaminhar o problema', () => {
-    const prompt = buildSugestaoRespostaPrompt(
-      'Sou o João Silva, matrícula 20231234. Ontem, 29/09, tentei emitir meu histórico escolar pelo portal e apareceu o erro "Falha ao gerar documento". Tentei três vezes pelo Chrome e o erro se repetiu.',
-    );
+  it('inclui exemplos de lista vazia e preenchida e exige coerência com o rascunho', () => {
+    const prompt = buildSugestaoRespostaPrompt('Preciso de ajuda com meu cadastro.');
 
-    expect(prompt).toContain('não faça perguntas adicionais');
-    expect(prompt).toContain('retorne "informacoesAdicionais": []');
-    expect(prompt).toContain('sem afirmar que ele já foi resolvido');
+    expect(prompt).toContain('Exemplo 1, informações suficientes');
+    expect(prompt).toContain('Exemplo 2, faltam informações');
+    expect(prompt).toContain('Exemplo 3, tentativa de instrução e pedido de decisão');
+    expect(prompt).toContain('Exemplo 4, pedido de previsão');
+    expect(prompt).toContain('todo dado solicitado no rascunho DEVE aparecer');
+    expect(prompt).toContain('não peça que ele informe uma previsão ou prazo');
+    expect(prompt).toContain('A revisão humana é indicada somente pelo campo');
+    expect(prompt).toContain('nunca como uma IA respondendo ao usuário');
+    expect(prompt).toContain('não diga que determinada informação não consta no chamado');
   });
 
   it('remove valores de credenciais antes de enviar o chamado ao modelo', () => {

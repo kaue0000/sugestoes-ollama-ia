@@ -324,6 +324,37 @@
 	color: #e7e9e2;
 }
 
+.response-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 7px;
+	margin-top: 13px;
+}
+
+.response-meta span {
+	padding: 5px 8px;
+	border: 1px solid #394235;
+	border-radius: 6px;
+	color: #b6e3a5;
+	font-size: 10px;
+}
+
+.additional-info-empty,
+.additional-info {
+	margin-top: 10px !important;
+	color: #9b9f95 !important;
+	font-size: 12px !important;
+}
+
+.additional-info ul {
+	margin: 6px 0 0;
+	padding-left: 18px;
+}
+
+.additional-info li + li {
+	margin-top: 4px;
+}
+
 .composer-wrap {
 	width: 100%;
 	max-width: 760px;

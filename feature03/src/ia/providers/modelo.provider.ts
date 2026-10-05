@@ -1,5 +1,6 @@
 export interface GerarRespostaInput {
     mensagem: string;
+  format?: 'json';
 }
 
 export interface GerarRespostaOutput {
