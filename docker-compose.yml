@@ -1,0 +1,41 @@
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+  frontend:
+    build:
+      context: ./feature03/frontend
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      HOME: /tmp
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./feature03/frontend:/app
+      - frontend_node_modules:/app/node_modules
+
+  backend:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run start:dev"
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: llama3.2:latest
+      OLLAMA_TIMEOUT_MS: 120000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./feature03:/app
+      - backend_node_modules:/app/node_modules
+    depends_on:
+      - ollama
+
+volumes:
+  frontend_node_modules:
+  backend_node_modules:
+  ollama-data:
