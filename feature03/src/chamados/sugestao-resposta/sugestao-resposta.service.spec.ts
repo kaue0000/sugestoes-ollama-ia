@@ -1,11 +1,11 @@
 import { jest } from '@jest/globals';
 import { Test } from '@nestjs/testing';
-import { MODELO_PROVIDER } from '../ia/providers/modelo.provider';
-import { ChamadosService } from './chamados.service';
+import { MODELO_PROVIDER } from '../../ia/providers/modelo.provider';
+import { SugestaoRespostaService } from './sugestao-resposta.service';
 
 describe('Feature 3 - sugestão de resposta', () => {
   const gerar = jest.fn();
-  let service: ChamadosService;
+  let service: SugestaoRespostaService;
 
   const resposta = (rascunho: string, informacoesAdicionais: string[] = []) =>
     JSON.stringify({
@@ -18,11 +18,11 @@ describe('Feature 3 - sugestão de resposta', () => {
     gerar.mockReset();
     const moduleRef = await Test.createTestingModule({
       providers: [
-        ChamadosService,
+        SugestaoRespostaService,
         { provide: MODELO_PROVIDER, useValue: { gerar } },
       ],
     }).compile();
-    service = moduleRef.get(ChamadosService);
+    service = moduleRef.get(SugestaoRespostaService);
   });
 
   it('gera rascunho quando há informação suficiente', async () => {
