@@ -43,6 +43,14 @@ export class IaStreamService {
           'A sugestão gerada não passou pela validação de segurança. Tente novamente ou encaminhe o chamado para revisão manual.',
         );
       }
+      if (
+        response.status === 502 &&
+        mensagem.includes('pergunta sem informações adicionais')
+      ) {
+        throw new Error(
+          'O modelo pediu informações sem listá-las. Tente novamente.',
+        );
+      }
       if (response.status === 502 && mensagem.includes('sugestão de resposta inválida')) {
         throw new Error('O modelo retornou uma sugestão em formato inválido. Tente novamente.');
       }

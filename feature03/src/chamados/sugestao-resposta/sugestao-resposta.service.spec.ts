@@ -73,20 +73,70 @@ describe('Feature 3 - sugestão de resposta', () => {
     });
   });
 
-  it('remove perguntas diretas quando a lista adicional está vazia', async () => {
+  it('rejeita pergunta no rascunho quando a lista adicional está vazia', async () => {
     gerar.mockResolvedValue({
       resposta: resposta(
-        'Olá. Reconhecemos o problema no cadastro. Qual sistema apresenta o problema?',
+        'Olá. Para entendermos melhor, poderia descrever o problema ou a solicitação que você deseja encaminhar?',
       ),
       modelo: 'llama3.2:latest',
     });
 
     await expect(
       service.sugerirResposta('Meu cadastro apresenta um problema.'),
-    ).resolves.toMatchObject({
-      rascunho: 'Olá. Reconhecemos o problema no cadastro.',
-      informacoesAdicionais: [],
+    ).rejects.toThrow('pergunta sem informações adicionais');
+    expect(gerar).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejeita rascunho que inventa período temporal ausente no chamado', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta(
+        'Olá. Reconhecemos a dificuldade para entrar no sistema. Desde ontem, não foi possível acessar a conta. Poderia informar a mensagem de erro exibida?',
+      ),
+      modelo: 'llama3.2:latest',
     });
+
+    await expect(
+      service.sugerirResposta('Não consigo entrar no sistema.'),
+    ).rejects.toThrow('tempo inventado');
+  });
+
+  it('mascara dados sensíveis no campo texto retornado', async () => {
+    gerar.mockResolvedValue({
+      resposta: resposta('Olá. Reconhecemos a dificuldade de acesso.'),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(
+      service.sugerirResposta('Meu login e senha são admin e Abc123.'),
+    ).resolves.toMatchObject({
+      texto: 'Meu login e [DADO SENSÍVEL OMITIDO].',
+    });
+  });
+
+  it('tenta novamente quando a pergunta não corresponde à lista adicional', async () => {
+    gerar
+      .mockResolvedValueOnce({
+        resposta: resposta(
+          'Olá. Para entendermos melhor, poderia descrever o problema ou a solicitação que você deseja encaminhar?',
+        ),
+        modelo: 'llama3.2:latest',
+      })
+      .mockResolvedValueOnce({
+        resposta: resposta(
+          'Olá. Para entendermos melhor, poderia descrever o problema ou a solicitação que você deseja encaminhar?',
+          ['Descrição do problema ou da solicitação'],
+        ),
+        modelo: 'llama3.2:latest',
+      });
+
+    await expect(
+      service.sugerirResposta('Meu cadastro apresenta um problema.'),
+    ).resolves.toMatchObject({
+      rascunho:
+        'Olá. Para entendermos melhor, poderia descrever o problema ou a solicitação que você deseja encaminhar?',
+      informacoesAdicionais: ['Descrição do problema ou da solicitação'],
+    });
+    expect(gerar).toHaveBeenCalledTimes(2);
   });
 
   it('preserva pedidos de dados quando a lista adicional está preenchida', async () => {

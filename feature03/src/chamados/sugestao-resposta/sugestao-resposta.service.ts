@@ -43,6 +43,11 @@ const DECISAO_NAO_AUTORIZADA = [
 
 const PEDIDO_DADOS_ADICIONAIS =
   /\b(?:mais\s+(?:informa(?:ção|ções)|dados|detalhes)|(?:precisa|precisamos|necessita|necessitamos)\s+(?:saber\s+mais|fornecer|enviar|informar)|(?:pode|poderia)\s+(?:fornecer|enviar|informar)|(?:envie|informe|forneça|compartilhe)\b.{0,40}\b(?:dados?|informa(?:ção|ções)|detalhes?|mensagem)|(?:qual|quais|quando|desde\s+quando)\s+(?:sistema|página|pagina|serviço|servico|mensagem|erro|problema|isso|o\s+problema))\b/i;
+const PERGUNTA_SEM_INFORMACOES_ADICIONAIS =
+  'O modelo retornou uma pergunta sem informações adicionais correspondentes';
+const TEMPO_INVENTADO = 'O modelo retornou tempo inventado';
+const PADROES_TEMPO =
+  /\b(?:desde\s+ontem|ontem|hoje|anteontem|semana\s+passada|mês\s+passado|ano\s+passado|há\s+\d+\s+dias?|nos\s+últimos\s+\d+\s+dias?|nos\s+últimos\s+\d+\s+meses?)\b/i;
 
 function removerPedidoDeDadosAdicionais(rascunho: string): string {
   const frases = rascunho.split(/(?<=[.!?])\s+/);
@@ -55,8 +60,26 @@ function removerPedidoDeDadosAdicionais(rascunho: string): string {
     : 'Reconhecemos o problema relatado. A resolução ainda não foi confirmada.';
 }
 
+function mascararDadosSensiveis(texto: string): string {
+  if (!/\b(?:senha|password|token|secret|código\s+de\s+verificação|codigo\s+de\s+verificacao|código\s+de\s+autenticação|codigo\s+de\s+autenticacao)\b/i.test(texto)) {
+    return texto;
+  }
+
+  const mascarado = texto.replace(
+    /\b(?:senha|password|token|secret|código\s+de\s+verificação|codigo\s+de\s+verificacao|código\s+de\s+autenticação|codigo\s+de\s+autenticacao)\b[\s\S]{0,80}(?=[.!?]|$)/gi,
+    '[DADO SENSÍVEL OMITIDO]',
+  );
+
+  if (/[.!?]$/.test(texto) && !/[.!?]$/.test(mascarado)) {
+    return `${mascarado}${texto.at(-1)}`;
+  }
+
+  return mascarado;
+}
+
 function parseSugestaoResposta(
   resposta: string,
+  textoOriginal: string,
 ): Pick<
   SugestaoRespostaResultado,
   'rascunho' | 'informacoesAdicionais' | 'revisaoHumanaObrigatoria'
@@ -103,9 +126,10 @@ function parseSugestaoResposta(
     );
   }
 
+  const rascunhoNormalizado = rascunho.trim();
   const rascunhoSemPedidos = informacoesAdicionais.length
-    ? rascunho.trim()
-    : removerPedidoDeDadosAdicionais(rascunho.trim());
+    ? rascunhoNormalizado
+    : removerPedidoDeDadosAdicionais(rascunhoNormalizado);
   const textos = [rascunhoSemPedidos, ...informacoesAdicionais];
   if (
     informacoesAdicionais.some((item) => MENCIONA_CREDENCIAL.test(item)) ||
@@ -119,6 +143,14 @@ function parseSugestaoResposta(
     throw new BadGatewayException(
       'O modelo retornou conteúdo proibido na sugestão de resposta',
     );
+  }
+
+  if (PADROES_TEMPO.test(rascunhoNormalizado) && !PADROES_TEMPO.test(textoOriginal)) {
+    throw new BadGatewayException(TEMPO_INVENTADO);
+  }
+
+  if (!informacoesAdicionais.length && rascunhoNormalizado.includes('?')) {
+    throw new BadGatewayException(PERGUNTA_SEM_INFORMACOES_ADICIONAIS);
   }
 
   return {
@@ -139,17 +171,33 @@ export class SugestaoRespostaService {
     textoOriginal: string,
   ): Promise<SugestaoRespostaResultado> {
     const texto = textoOriginal.trim();
-    const resultado = await this.modelo.gerar({
-      mensagem: buildSugestaoRespostaPrompt(texto),
-      format: 'json',
-    });
-    const sugestao = parseSugestaoResposta(resultado.resposta);
+    const mensagem = buildSugestaoRespostaPrompt(texto);
 
-    return {
-      texto,
-      ...sugestao,
-      modelo: resultado.modelo,
-      status: 'RASCUNHO',
-    };
+    for (let tentativa = 0; tentativa < 2; tentativa += 1) {
+      const resultado = await this.modelo.gerar({ mensagem, format: 'json' });
+
+      try {
+        const sugestao = parseSugestaoResposta(resultado.resposta, texto);
+
+        return {
+          texto: mascararDadosSensiveis(texto),
+          ...sugestao,
+          modelo: resultado.modelo,
+          status: 'RASCUNHO',
+        };
+      } catch (error) {
+        if (
+          tentativa === 0 &&
+          error instanceof BadGatewayException &&
+          error.message === PERGUNTA_SEM_INFORMACOES_ADICIONAIS
+        ) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new BadGatewayException(PERGUNTA_SEM_INFORMACOES_ADICIONAIS);
   }
 }
