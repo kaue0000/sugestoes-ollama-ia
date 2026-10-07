@@ -163,9 +163,7 @@ function parseSugestaoResposta(
 @Injectable()
 export class SugestaoRespostaService {
   constructor(
-    @Inject(MODELO_PROVIDER)
-    private readonly modelo: ModeloProvider,
-  ) {}
+    @Inject(MODELO_PROVIDER) private readonly modelo: ModeloProvider) {}
 
   async sugerirResposta(
     textoOriginal: string,

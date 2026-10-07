@@ -155,6 +155,7 @@ export function buildSugestaoRespostaMessages(texto: string): MensagemChat[] {
  * Compatível com o código atual (um único prompt em string).
  * Use somente se o seu backend não aceitar mensagens separadas.
  */
+
 export function buildSugestaoRespostaPrompt(texto: string): string {
   const exemplos = EXEMPLOS.map(
     (e, i) =>
