@@ -14,20 +14,10 @@ A aplicação ajuda atendentes a redigir respostas para chamados. Ela gera um ra
 
 A aplicação orienta o modelo a não inventar informações, prometer prazos ou confirmar decisões. Essas verificações não substituem a revisão do atendente.
 
-## Como executar
+## Como executar (Passo a passo)
 
 É necessário ter Docker com Docker Compose instalado. Execute os comandos a partir deste diretório, que contém o arquivo `docker-compose.yml`.
 
-
-Temos dois caminhos possíveis: Iniciar o docker compose de uma vez, ou cada uma das partes da aplicação por vez.
-
-
-## Iniciando tudo de uma vez
-   ```bash
-   docker compose up -d
-   ```
-
-## Iniciando por partes
 1. Inicie o Ollama:
 
    ```bash
