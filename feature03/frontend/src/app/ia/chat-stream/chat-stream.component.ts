@@ -5,6 +5,7 @@ import { IaStreamService } from '../ia-stream.service';
 interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
+  fileName?: string;
   informacoesAdicionais?: string[];
   revisaoHumanaObrigatoria?: boolean;
   status?: 'RASCUNHO';
@@ -21,19 +22,24 @@ export class ChatStreamComponent {
   private readonly ia = inject(IaStreamService);
   private abortController?: AbortController;
   private readonly messageList = viewChild<ElementRef<HTMLElement>>('messageList');
+  private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
   mensagem = '';
+  arquivo?: File;
   mensagens = signal<ChatMessage[]>([]);
   status = signal<'idle' | 'loading' | 'done' | 'error' | 'cancelled'>('idle');
 
   async enviar(): Promise<void> {
     const mensagem = this.mensagem.trim();
     if (!mensagem || this.status() === 'loading') return;
+    const arquivo = this.arquivo;
 
     this.mensagem = '';
+    this.arquivo = undefined;
+    this.limparInputArquivo();
     this.mensagens.update((current) => [
       ...current,
-      { role: 'user', text: mensagem },
+      { role: 'user', text: mensagem, fileName: arquivo?.name },
       { role: 'assistant', text: '' },
     ]);
     this.abortController = new AbortController();
@@ -44,6 +50,7 @@ export class ChatStreamComponent {
       const sugestao = await this.ia.sugerirResposta(
         mensagem,
         this.abortController.signal,
+        arquivo,
       );
       this.updateLatest({
         text: sugestao.rascunho,
@@ -79,6 +86,18 @@ export class ChatStreamComponent {
     this.mensagens.set([]);
     this.status.set('idle');
     this.mensagem = '';
+    this.arquivo = undefined;
+    this.limparInputArquivo();
+  }
+
+  selecionarArquivo(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.arquivo = input.files?.[0];
+  }
+
+  removerArquivo(): void {
+    this.arquivo = undefined;
+    this.limparInputArquivo();
   }
 
   usarSugestao(sugestao: string): void {
@@ -106,5 +125,10 @@ export class ChatStreamComponent {
       const element = this.messageList()?.nativeElement;
       if (element) element.scrollTop = element.scrollHeight;
     });
+  }
+
+  private limparInputArquivo(): void {
+    const input = this.fileInput()?.nativeElement;
+    if (input) input.value = '';
   }
 }

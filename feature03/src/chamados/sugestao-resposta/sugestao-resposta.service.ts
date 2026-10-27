@@ -1,9 +1,22 @@
-import { BadGatewayException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  BadGatewayException,
+  Inject,
+  Injectable,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import {
   MODELO_PROVIDER,
   type ModeloProvider,
 } from '../../ia/providers/modelo.provider';
-import { buildSugestaoRespostaPrompt } from './sugestao-resposta.prompt';
+import {
+  buildSugestaoRespostaPrompt,
+  protegerDadosSensiveis,
+} from './sugestao-resposta.prompt';
+import pdfParse from 'pdf-parse';
+
+const TIPOS_IMAGEM = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const LIMITE_CARACTERES_DOCUMENTO = 20000;
 
 export interface SugestaoRespostaResultado {
   texto: string;
@@ -167,9 +180,56 @@ export class SugestaoRespostaService {
 
   async sugerirResposta(
     textoOriginal: string,
+    arquivo?: Express.Multer.File,
   ): Promise<SugestaoRespostaResultado> {
     const texto = textoOriginal.trim();
     const mensagem = buildSugestaoRespostaPrompt(texto);
+    let textoDocumento = '';
+
+    if (arquivo) {
+      if (TIPOS_IMAGEM.has(arquivo.mimetype)) {
+        return this.sugerirComArquivo(
+          mensagem,
+          texto,
+          texto,
+          arquivo.buffer.toString('base64'),
+        );
+      }
+
+      if (arquivo.mimetype === 'text/plain') {
+        textoDocumento = arquivo.buffer.toString('utf8').trim();
+      } else if (arquivo.mimetype === 'application/pdf') {
+        try {
+          textoDocumento = (await pdfParse(arquivo.buffer)).text.trim();
+        } catch {
+          throw new BadRequestException('Não foi possível ler o arquivo PDF');
+        }
+      } else {
+        throw new UnsupportedMediaTypeException(
+          'Envie PNG, JPEG, WebP, PDF ou TXT',
+        );
+      }
+
+      if (!textoDocumento) {
+        throw new BadRequestException('O documento enviado está vazio');
+      }
+
+      if (textoDocumento.length > LIMITE_CARACTERES_DOCUMENTO) {
+        throw new BadRequestException(
+          'O documento ultrapassa o limite de caracteres',
+        );
+      }
+
+      textoDocumento = protegerDadosSensiveis(textoDocumento);
+
+      return this.sugerirComArquivo(
+        mensagem,
+        texto,
+        `${texto}\n${textoDocumento}`,
+        undefined,
+        textoDocumento,
+      );
+    }
 
     for (let tentativa = 0; tentativa < 2; tentativa += 1) {
       const resultado = await this.modelo.gerar({ mensagem, format: 'json' });
@@ -179,6 +239,49 @@ export class SugestaoRespostaService {
 
         return {
           texto: mascararDadosSensiveis(texto),
+          ...sugestao,
+          modelo: resultado.modelo,
+          status: 'RASCUNHO',
+        };
+      } catch (error) {
+        if (
+          tentativa === 0 &&
+          error instanceof BadGatewayException &&
+          error.message === PERGUNTA_SEM_INFORMACOES_ADICIONAIS
+        ) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new BadGatewayException(PERGUNTA_SEM_INFORMACOES_ADICIONAIS);
+  }
+
+  private async sugerirComArquivo(
+    mensagem: string,
+    textoOriginal: string,
+    textoParaValidacao: string,
+    imagemBase64?: string,
+    documento?: string,
+  ): Promise<SugestaoRespostaResultado> {
+    for (let tentativa = 0; tentativa < 2; tentativa += 1) {
+      const resultado = await this.modelo.analisarArquivo({
+        prompt: mensagem,
+        ...(imagemBase64 ? { imagemBase64 } : {}),
+        ...(documento ? { textoDocumento: documento } : {}),
+        format: 'json',
+      });
+
+      try {
+        const sugestao = parseSugestaoResposta(
+          resultado.resposta,
+          textoParaValidacao,
+        );
+
+        return {
+          texto: mascararDadosSensiveis(textoOriginal),
           ...sugestao,
           modelo: resultado.modelo,
           status: 'RASCUNHO',

@@ -8,10 +8,12 @@ import { SugestaoRespostaModule } from './sugestao-resposta.module';
 
 describe('SugestaoRespostaController', () => {
   const gerar = jest.fn();
+  const analisarArquivo = jest.fn();
   let app: INestApplication;
 
   beforeEach(async () => {
     gerar.mockReset();
+    analisarArquivo.mockReset();
     gerar.mockResolvedValue({
       resposta: JSON.stringify({
         rascunho: 'Olá. Reconhecemos a dificuldade relatada.',
@@ -22,12 +24,20 @@ describe('SugestaoRespostaController', () => {
       tokensEntrada: 0,
       tokensSaida: 0,
     });
+    analisarArquivo.mockResolvedValue({
+      resposta: JSON.stringify({
+        rascunho: 'Olá. Reconhecemos a dificuldade relatada.',
+        informacoesAdicionais: [],
+        revisaoHumanaObrigatoria: true,
+      }),
+      modelo: 'modelo-controlado',
+    });
 
     const moduleRef = await Test.createTestingModule({
       imports: [SugestaoRespostaModule],
     })
       .overrideProvider(MODELO_PROVIDER)
-      .useValue({ gerar })
+      .useValue({ gerar, analisarArquivo })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -73,6 +83,50 @@ describe('SugestaoRespostaController', () => {
       .expect(400);
 
     expect(gerar).not.toHaveBeenCalled();
+  });
+
+  it('recebe uma imagem como contexto adicional sem alterar a rota', async () => {
+    await request(app.getHttpServer())
+      .post('/chamados/sugerir-resposta')
+      .field('texto', 'Não consigo acessar o portal.')
+      .attach('arquivo', Buffer.from('imagem'), {
+        filename: 'erro.png',
+        contentType: 'image/png',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          texto: 'Não consigo acessar o portal.',
+          rascunho: 'Olá. Reconhecemos a dificuldade relatada.',
+          status: 'RASCUNHO',
+        });
+      });
+
+    expect(analisarArquivo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imagemBase64: Buffer.from('imagem').toString('base64'),
+        format: 'json',
+      }),
+    );
+    expect(gerar).not.toHaveBeenCalled();
+  });
+
+  it('recebe um TXT como contexto adicional', async () => {
+    await request(app.getHttpServer())
+      .post('/chamados/sugerir-resposta')
+      .field('texto', 'Não consigo acessar o portal.')
+      .attach('arquivo', Buffer.from('A mensagem exibida foi: falha.'), {
+        filename: 'detalhe.txt',
+        contentType: 'text/plain',
+      })
+      .expect(200);
+
+    expect(analisarArquivo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        textoDocumento: 'A mensagem exibida foi: falha.',
+        format: 'json',
+      }),
+    );
   });
 
   it('retorna 502 quando o rascunho pergunta sem listar informações adicionais', async () => {

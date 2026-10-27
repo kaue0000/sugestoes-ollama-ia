@@ -12,13 +12,27 @@ export class IaStreamService {
   async sugerirResposta(
     texto: string,
     signal: AbortSignal,
+    arquivo?: File,
   ): Promise<SugestaoResposta> {
     let response: Response;
     try {
+      let body: BodyInit;
+      const headers: Record<string, string> = {};
+
+      if (arquivo) {
+        const formData = new FormData();
+        formData.append('texto', texto);
+        formData.append('arquivo', arquivo);
+        body = formData;
+      } else {
+        headers['Content-Type'] = 'application/json';
+        body = JSON.stringify({ texto });
+      }
+
       response = await fetch('http://localhost:3000/chamados/sugerir-resposta', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texto }),
+        headers,
+        body,
         signal,
       });
     } catch (error) {
@@ -59,6 +73,9 @@ export class IaStreamService {
       }
       if (response.status === 503) {
         throw new Error('O serviço de IA local está indisponível. Verifique se o modelo está conectado.');
+      }
+      if ([400, 413, 415].includes(response.status) && mensagem) {
+        throw new Error(mensagem);
       }
 
       throw new Error(`Não foi possível gerar a sugestão (HTTP ${response.status}).`);

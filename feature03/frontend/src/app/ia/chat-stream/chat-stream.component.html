@@ -64,6 +64,9 @@
                 @if (item.role === 'assistant') {
                   <div class="message-author">Sugestões <span>· IA local</span></div>
                 }
+                @if (item.fileName) {
+                  <p class="attachment-name">Arquivo: {{ item.fileName }}</p>
+                }
                 <p>{{ item.text || (status() === 'loading' ? 'Pensando...' : '') }}</p>
                 @if (item.revisaoHumanaObrigatoria) {
                   <div class="response-meta">
@@ -92,6 +95,28 @@
       <div class="composer-wrap">
         <form class="composer" (ngSubmit)="enviar()">
           <label class="sr-only" for="mensagem">Escreva sua mensagem</label>
+          <div class="attachment-picker">
+            <label class="attach-button" for="arquivo">＋ Anexar arquivo</label>
+            <input
+              id="arquivo"
+              #fileInput
+              name="arquivo"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,application/pdf,text/plain"
+              [disabled]="status() === 'loading'"
+              (change)="selecionarArquivo($event)"
+            />
+            @if (arquivo) {
+              <span class="selected-file">{{ arquivo.name }}</span>
+              <button
+                class="remove-file"
+                type="button"
+                [disabled]="status() === 'loading'"
+                (click)="removerArquivo()"
+                aria-label="Remover arquivo"
+              >×</button>
+            }
+          </div>
           <textarea
             id="mensagem"
             name="mensagem"

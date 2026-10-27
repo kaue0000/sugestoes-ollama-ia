@@ -1,10 +1,12 @@
 import { jest } from '@jest/globals';
+import { Readable } from 'node:stream';
 import { Test } from '@nestjs/testing';
 import { MODELO_PROVIDER } from '../../ia/providers/modelo.provider';
 import { SugestaoRespostaService } from './sugestao-resposta.service';
 
 describe('Feature 3 - sugestão de resposta', () => {
   const gerar = jest.fn();
+  const analisarArquivo = jest.fn();
   let service: SugestaoRespostaService;
 
   const resposta = (rascunho: string, informacoesAdicionais: string[] = []) =>
@@ -14,15 +16,133 @@ describe('Feature 3 - sugestão de resposta', () => {
       revisaoHumanaObrigatoria: true,
     });
 
+  const criarArquivo = (
+    mimetype: string,
+    buffer: Buffer,
+  ): Express.Multer.File => ({
+    fieldname: 'arquivo',
+    originalname: 'anexo',
+    encoding: '7bit',
+    mimetype,
+    size: buffer.length,
+    destination: '',
+    filename: '',
+    path: '',
+    buffer,
+    stream: Readable.from(buffer),
+  });
+
+  const criarPdf = (texto: string): Buffer => {
+    const stream = `BT /F1 12 Tf 72 720 Td (${texto}) Tj ET`;
+    const objetos = [
+      '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj',
+      '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj',
+      '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj',
+      `4 0 obj\n<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream\nendobj`,
+      '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj',
+    ];
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+
+    for (const objeto of objetos) {
+      offsets.push(Buffer.byteLength(pdf));
+      pdf += `${objeto}\n`;
+    }
+
+    const xrefOffset = Buffer.byteLength(pdf);
+    pdf += `xref\n0 ${objetos.length + 1}\n0000000000 65535 f \n`;
+    for (const offset of offsets.slice(1)) {
+      pdf += `${offset.toString().padStart(10, '0')} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    return Buffer.from(pdf);
+  };
+
   beforeEach(async () => {
     gerar.mockReset();
+    analisarArquivo.mockReset();
+    analisarArquivo.mockResolvedValue({
+      resposta: resposta('Olá. Reconhecemos a dificuldade relatada.'),
+      modelo: 'llama3.2:latest',
+    });
     const moduleRef = await Test.createTestingModule({
       providers: [
         SugestaoRespostaService,
-        { provide: MODELO_PROVIDER, useValue: { gerar } },
+        { provide: MODELO_PROVIDER, useValue: { gerar, analisarArquivo } },
       ],
     }).compile();
     service = moduleRef.get(SugestaoRespostaService);
+  });
+
+  it('usa o provider multimodal para anexos de imagem', async () => {
+    const imagem = Buffer.from('conteúdo da imagem');
+
+    await expect(
+      service.sugerirResposta(
+        'Não consigo acessar o portal.',
+        criarArquivo('image/png', imagem),
+      ),
+    ).resolves.toMatchObject({
+      texto: 'Não consigo acessar o portal.',
+      status: 'RASCUNHO',
+    });
+    expect(analisarArquivo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imagemBase64: imagem.toString('base64'),
+        format: 'json',
+      }),
+    );
+    expect(gerar).not.toHaveBeenCalled();
+  });
+
+  it('inclui o conteúdo TXT no contexto sem expô-lo no texto retornado', async () => {
+    await expect(
+      service.sugerirResposta(
+        'Não consigo acessar o portal.',
+        criarArquivo(
+          'text/plain',
+          Buffer.from('Mensagem de erro: falha. Minha senha: exemplo123.'),
+        ),
+      ),
+    ).resolves.toMatchObject({
+      texto: 'Não consigo acessar o portal.',
+      status: 'RASCUNHO',
+    });
+    expect(analisarArquivo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        textoDocumento:
+          'Mensagem de erro: falha. Minha senha: [DADO SENSÍVEL OMITIDO]',
+        format: 'json',
+      }),
+    );
+  });
+
+  it('extrai o texto de PDFs e o inclui no contexto do chamado', async () => {
+    await service.sugerirResposta(
+      'Não consigo acessar o portal.',
+      criarArquivo(
+        'application/pdf',
+        criarPdf('Mensagem de erro: falha.'),
+      ),
+    );
+
+    expect(analisarArquivo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        textoDocumento: expect.stringContaining('Mensagem de erro: falha.'),
+        format: 'json',
+      }),
+    );
+  });
+
+  it('rejeita formatos de arquivo não aceitos', async () => {
+    await expect(
+      service.sugerirResposta(
+        'Não consigo acessar o portal.',
+        criarArquivo('application/octet-stream', Buffer.from('dados')),
+      ),
+    ).rejects.toThrow('Envie PNG, JPEG, WebP, PDF ou TXT');
+    expect(analisarArquivo).not.toHaveBeenCalled();
   });
 
   it('gera rascunho quando há informação suficiente', async () => {

@@ -236,6 +236,7 @@ export class OllamaProvider implements ModeloProvider {
                 model,
                 messages: [message],
                 stream: false,
+                ...(input.format ? { format: input.format } : {}),
             },
             { timeout },
             );
@@ -275,4 +276,3 @@ export class OllamaProvider implements ModeloProvider {
         }
         }
 }
-

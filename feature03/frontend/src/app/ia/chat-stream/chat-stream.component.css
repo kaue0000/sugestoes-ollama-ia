@@ -395,6 +395,66 @@
 	line-height: 1.5;
 }
 
+.attachment-picker {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin: 0 0 8px;
+}
+
+.attachment-picker input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	clip-path: inset(50%);
+}
+
+.attach-button,
+.selected-file,
+.remove-file {
+	color: #a9bd9e;
+	font-size: 11px;
+}
+
+.attach-button {
+	cursor: pointer;
+}
+
+.attach-button:hover {
+	color: #d7edca;
+}
+
+.selected-file {
+	max-width: min(60%, 320px);
+	overflow: hidden;
+	color: #969a90;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.remove-file {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	font-size: 17px;
+	line-height: 1;
+}
+
+.remove-file:disabled {
+	cursor: default;
+	opacity: 0.6;
+}
+
+.attachment-name {
+	margin-bottom: 5px !important;
+	color: #a9bd9e !important;
+	font-size: 11px !important;
+}
+
 .composer textarea::placeholder {
 	color: #777c71;
 }

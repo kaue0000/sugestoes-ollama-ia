@@ -30,6 +30,7 @@ export interface AnalisarArquivoInput {
   prompt: string;
   imagemBase64?: string;
   textoDocumento?: string;
+  format?: 'json';
 }
 
 export interface AnalisarArquivoOutput {
