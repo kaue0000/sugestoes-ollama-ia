@@ -93,6 +93,7 @@ function mascararDadosSensiveis(texto: string): string {
 function parseSugestaoResposta(
   resposta: string,
   textoOriginal: string,
+  verificarTempo: boolean = true,
 ): Pick<
   SugestaoRespostaResultado,
   'rascunho' | 'informacoesAdicionais' | 'revisaoHumanaObrigatoria'
@@ -158,7 +159,11 @@ function parseSugestaoResposta(
     );
   }
 
-  if (PADROES_TEMPO.test(rascunhoNormalizado) && !PADROES_TEMPO.test(textoOriginal)) {
+  if (
+    verificarTempo &&
+    PADROES_TEMPO.test(rascunhoNormalizado) &&
+    !PADROES_TEMPO.test(textoOriginal)
+  ) {
     throw new BadGatewayException(TEMPO_INVENTADO);
   }
 
@@ -179,11 +184,21 @@ export class SugestaoRespostaService {
     @Inject(MODELO_PROVIDER) private readonly modelo: ModeloProvider) {}
 
   async sugerirResposta(
-    textoOriginal: string,
+    textoOriginal?: string,
     arquivo?: Express.Multer.File,
   ): Promise<SugestaoRespostaResultado> {
-    const texto = textoOriginal.trim();
-    const mensagem = buildSugestaoRespostaPrompt(texto);
+    const texto = textoOriginal?.trim() ?? '';
+
+    if (!texto && !arquivo) {
+      throw new BadRequestException(
+        'Informe o texto do chamado ou envie um arquivo',
+      );
+    }
+
+    const mensagem = buildSugestaoRespostaPrompt(
+      texto ||
+        'O solicitante enviou apenas o arquivo anexado como descrição do chamado. Use o conteúdo do arquivo como contexto.',
+    );
     let textoDocumento = '';
 
     if (arquivo) {
@@ -278,6 +293,7 @@ export class SugestaoRespostaService {
         const sugestao = parseSugestaoResposta(
           resultado.resposta,
           textoParaValidacao,
+          !imagemBase64,
         );
 
         return {

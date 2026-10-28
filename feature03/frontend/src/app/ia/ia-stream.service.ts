@@ -18,15 +18,16 @@ export class IaStreamService {
     try {
       let body: BodyInit;
       const headers: Record<string, string> = {};
+      const textoNormalizado = texto.trim();
 
       if (arquivo) {
         const formData = new FormData();
-        formData.append('texto', texto);
+        if (textoNormalizado) formData.append('texto', textoNormalizado);
         formData.append('arquivo', arquivo);
         body = formData;
       } else {
         headers['Content-Type'] = 'application/json';
-        body = JSON.stringify({ texto });
+        body = JSON.stringify({ texto: textoNormalizado });
       }
 
       response = await fetch('http://localhost:3000/chamados/sugerir-resposta', {

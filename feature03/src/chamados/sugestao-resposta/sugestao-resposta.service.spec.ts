@@ -96,6 +96,40 @@ describe('Feature 3 - sugestão de resposta', () => {
     expect(gerar).not.toHaveBeenCalled();
   });
 
+  it('gera sugestão com imagem mesmo sem texto digitado', async () => {
+    analisarArquivo.mockResolvedValue({
+      resposta: resposta(
+        'Olá. Reconhecemos a dificuldade apresentada na mensagem de ontem.',
+      ),
+      modelo: 'llama3.2:latest',
+    });
+
+    await expect(
+      service.sugerirResposta(undefined, criarArquivo('image/png', Buffer.from('imagem'))),
+    ).resolves.toMatchObject({
+      texto: '',
+      rascunho: expect.stringContaining('ontem'),
+      status: 'RASCUNHO',
+    });
+
+    expect(analisarArquivo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imagemBase64: Buffer.from('imagem').toString('base64'),
+        prompt: expect.stringContaining(
+          'O solicitante enviou apenas o arquivo anexado',
+        ),
+      }),
+    );
+  });
+
+  it('exige texto ou arquivo para gerar uma sugestão', async () => {
+    await expect(service.sugerirResposta()).rejects.toThrow(
+      'Informe o texto do chamado ou envie um arquivo',
+    );
+    expect(gerar).not.toHaveBeenCalled();
+    expect(analisarArquivo).not.toHaveBeenCalled();
+  });
+
   it('inclui o conteúdo TXT no contexto sem expô-lo no texto retornado', async () => {
     await expect(
       service.sugerirResposta(

@@ -31,8 +31,8 @@ export class ChatStreamComponent {
 
   async enviar(): Promise<void> {
     const mensagem = this.mensagem.trim();
-    if (!mensagem || this.status() === 'loading') return;
     const arquivo = this.arquivo;
+    if ((!mensagem && !arquivo) || this.status() === 'loading') return;
 
     this.mensagem = '';
     this.arquivo = undefined;

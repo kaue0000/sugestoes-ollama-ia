@@ -134,7 +134,7 @@
                 <span aria-hidden="true">■</span>
               </button>
             } @else {
-              <button class="send-button" type="submit" [disabled]="!mensagem.trim()" aria-label="Enviar mensagem">
+              <button class="send-button" type="submit" [disabled]="!mensagem.trim() && !arquivo" aria-label="Enviar mensagem">
                 <span aria-hidden="true">↑</span>
               </button>
             }

@@ -63,4 +63,28 @@ describe('IaStreamService', () => {
     expect((options?.body as FormData).get('texto')).toBe('Chamado de teste');
     expect((options?.body as FormData).get('arquivo')).toBe(arquivo);
   });
+
+  it('envia só o arquivo quando não há texto digitado', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          rascunho: 'Olá.',
+          informacoesAdicionais: [],
+          revisaoHumanaObrigatoria: true,
+          status: 'RASCUNHO',
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const arquivo = new File(['imagem'], 'erro.png', { type: 'image/png' });
+    const signal = new AbortController().signal;
+
+    await new IaStreamService().sugerirResposta('', signal, arquivo);
+
+    const options = fetchMock.mock.calls[0][1];
+    expect(options?.body).toBeInstanceOf(FormData);
+    expect((options?.body as FormData).get('texto')).toBeNull();
+    expect((options?.body as FormData).get('arquivo')).toBe(arquivo);
+  });
 });
